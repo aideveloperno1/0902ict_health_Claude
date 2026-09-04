@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>운동 일지</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋</text></svg>" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- ================= 앱 껍데기 =================
+       여기 있는 id는 화면 전체에 하나씩만 존재하는 것들이다.
+       각 화면 안쪽 요소는 id를 쓰지 않고 data-el로 찾는다. 모듈이 늘어도 이름이 겹치지 않는다. -->
+
+  <div class="glow" id="glow" aria-hidden="true"></div>
+
+  <header class="app-header" id="appHeader" hidden>
+    <div class="wrap header-inner">
+      <div class="brand">
+        <span class="brand-mark">🏋</span>
+        <span class="brand-name">운동 일지</span>
+      </div>
+
+      <nav class="tabs" id="tabs" aria-label="주요 메뉴">
+        <a class="tab" href="#/" data-tab="dashboard">대시보드</a>
+        <a class="tab" href="#/workouts" data-tab="workouts">운동</a>
+        <a class="tab" href="#/meals" data-tab="meals">식단</a>
+        <a class="tab" href="#/routines" data-tab="routines">루틴</a>
+        <a class="tab" href="#/body" data-tab="body">내 몸</a>
+      </nav>
+
+      <div class="header-right">
+        <a class="user-name" id="userName" href="#/profile"></a>
+        <!-- 누를 때마다 시스템 → 밝게 → 어둡게 순으로 돈다. 아이콘과 설명은 theme.js가 채운다. -->
+        <button type="button" class="btn btn-ghost theme-toggle" id="themeBtn"></button>
+        <button type="button" class="btn btn-ghost" id="logoutBtn">로그아웃</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap main" id="app"></main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- 폼을 작성하다 떠나려 할 때 뜬다.
+       브라우저 기본 confirm() 대신 앱 안의 바를 쓰는 이유:
+       상세 화면의 삭제 확인이 이미 같은 방식이라 동작이 일관되고,
+       confirm()은 화면 전체를 멈춰 세워서 뒤에서 진행 중이던 요청까지 붙잡는다. -->
+  <div class="leave-bar" id="leaveBar" role="alertdialog" aria-labelledby="leaveText" hidden>
+    <p class="leave-text" id="leaveText">작성 중인 내용이 저장되지 않습니다. 나가시겠어요?</p>
+    <div class="leave-actions">
+      <button type="button" class="btn btn-ghost" id="leaveStay">계속 작성</button>
+      <button type="button" class="btn btn-danger" id="leaveGo">나가기</button>
+    </div>
+  </div>
+
+
+  <!-- ================= 화면 템플릿 ================= -->
+
+  <template id="tpl-auth">
+    <section class="view">
+      <div class="card auth-card">
+        <div class="auth-head">
+          <span class="brand-mark brand-mark-lg">🏋</span>
+          <h1 class="auth-title">운동 일지</h1>
+          <p class="auth-sub" data-el="sub">계정에 로그인하세요</p>
+        </div>
+
+        <form data-el="form" novalidate>
+          <div class="field" data-el="nameField" hidden>
+            <label for="fName">이름</label>
+            <input type="text" id="fName" data-el="name" autocomplete="name" placeholder="김헬스" />
+          </div>
+          <div class="field">
+            <label for="fEmail">이메일</label>
+            <input type="email" id="fEmail" data-el="email" autocomplete="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="fPassword">비밀번호</label>
+            <input type="password" id="fPassword" data-el="password" autocomplete="current-password" placeholder="8자 이상" />
+          </div>
+
+          <p class="form-error" data-el="error" hidden></p>
+
+          <button type="submit" class="btn btn-primary btn-block" data-el="submit">로그인</button>
+        </form>
+
+        <p class="auth-switch">
+          <span data-el="switchText">계정이 없으신가요?</span>
+          <button type="button" class="link" data-el="switch">회원가입</button>
+        </p>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-workout-list">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">내 운동 일지</h1>
+        <button type="button" class="btn btn-primary" data-el="new">+ 새 일지 쓰기</button>
+      </div>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <div class="empty" data-el="empty" hidden>
+        <p class="empty-icon" aria-hidden="true">💪</p>
+        <p class="empty-title">아직 기록한 일지가 없어요</p>
+        <p class="empty-sub">오늘의 운동을 남겨보세요.</p>
+        <button type="button" class="btn btn-primary" data-el="emptyNew">+ 첫 일지 쓰기</button>
+      </div>
+
+      <div class="card-list" data-el="items"></div>
+
+      <!-- 목록을 나눠 받을 때만 보인다. 한 페이지로 끝나면 통째로 숨는다.
+           data-el 이름(more / count / loadMore)은 세 화면이 똑같이 쓴다.
+           그래야 screen.js의 createPager가 화면마다 다른 이름을 알 필요가 없다. -->
+      <div class="list-more" data-el="more" hidden>
+        <p class="list-count" data-el="count"></p>
+        <button type="button" class="btn btn-ghost" data-el="loadMore">더 보기</button>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-workout-detail">
+    <section class="view">
+      <button type="button" class="btn btn-ghost back" data-el="back">← 목록</button>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <article class="card detail-card" data-el="card" hidden>
+        <div class="meta-row">
+          <span class="date" data-el="date"></span>
+          <span class="badges" data-el="muscles"></span>
+          <span class="date" data-el="duration"></span>
+        </div>
+        <h1 class="detail-title" data-el="title"></h1>
+
+        <div data-el="exercisesBlock">
+          <div class="section-head">
+            <h2 class="section-title">운동</h2>
+            <span class="total-volume">총 볼륨 <strong data-el="totalVolume"></strong></span>
+          </div>
+          <div class="detail-exercises" data-el="exercises"></div>
+        </div>
+
+        <div data-el="memoBlock" hidden>
+          <h2 class="section-title">메모</h2>
+          <p class="memo" data-el="memo"></p>
+        </div>
+
+        <div class="detail-actions" data-el="actions">
+          <button type="button" class="btn btn-secondary" data-el="edit">수정</button>
+          <button type="button" class="btn btn-danger" data-el="delete">삭제</button>
+        </div>
+
+        <div class="confirm-bar" data-el="confirmBar" hidden>
+          <span class="confirm-text">정말 삭제할까요? 되돌릴 수 없습니다.</span>
+          <div class="confirm-actions">
+            <button type="button" class="btn btn-secondary" data-el="cancelDelete">아니오</button>
+            <button type="button" class="btn btn-danger" data-el="confirmDelete">삭제</button>
+          </div>
+        </div>
+      </article>
+    </section>
+  </template>
+
+  <!-- 상세 화면의 운동 한 덩어리 -->
+  <template id="tpl-detail-exercise">
+    <div class="ex-card">
+      <div class="ex-card-head">
+        <span class="ex-card-name" data-el="name"></span>
+        <span class="badge" data-el="muscle" hidden></span>
+        <span class="ex-card-sub">소계 <strong data-el="subtotal"></strong></span>
+      </div>
+      <div class="table-wrap">
+        <table class="ex-table">
+          <thead>
+            <tr>
+              <th scope="col" class="num">세트</th>
+              <th scope="col" class="num">무게</th>
+              <th scope="col" class="num">횟수</th>
+              <th scope="col" class="num">볼륨</th>
+              <th scope="col">완료</th>
+            </tr>
+          </thead>
+          <tbody data-el="sets"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-workout-form">
+    <section class="view">
+      <button type="button" class="btn btn-ghost back" data-el="back">← 취소</button>
+
+      <form class="card form-card" data-el="form" novalidate>
+        <h1 class="view-title" data-el="heading">새 일지 쓰기</h1>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="wDate">날짜</label>
+            <input type="date" id="wDate" data-el="date" />
+          </div>
+          <div class="field">
+            <label for="wDuration">운동 시간(분)</label>
+            <input type="number" id="wDuration" data-el="duration" min="0" step="5" placeholder="60" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="wTitle">제목</label>
+          <input type="text" id="wTitle" data-el="title" placeholder="가슴 + 삼두 루틴" />
+        </div>
+
+        <div class="field">
+          <div class="section-head">
+            <label>운동</label>
+            <span class="total-volume">총 볼륨 <strong data-el="totalVolume">—</strong></span>
+          </div>
+          <div class="ex-cards" data-el="exercises"></div>
+          <div class="form-tools">
+            <button type="button" class="btn btn-secondary btn-sm" data-el="addEx">+ 운동 추가</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-el="loadPrev">직전 기록 불러오기</button>
+          </div>
+          <p class="hint">직전 기록은 <strong>같은 운동 이름</strong>의 가장 최근 기록을 찾아 무게·횟수를 채웁니다. 완료 체크는 가져오지 않습니다.</p>
+        </div>
+
+        <div class="field">
+          <label for="wMemo">메모</label>
+          <textarea id="wMemo" data-el="memo" rows="3" placeholder="오늘 컨디션, 특이사항 등"></textarea>
+        </div>
+
+        <p class="form-error" data-el="error" hidden></p>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" data-el="cancel">취소</button>
+          <button type="submit" class="btn btn-primary" data-el="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <!-- 작성/수정 폼의 운동 카드 -->
+  <template id="tpl-exercise-card">
+    <div class="ex-card ex-card-edit">
+      <div class="ex-card-head">
+        <input type="text" class="ex-name" data-el="name" placeholder="벤치프레스" aria-label="운동 이름" />
+        <select class="ex-muscle" data-el="muscle" aria-label="부위">
+          <option value="">부위</option>
+          <option value="가슴">가슴</option>
+          <option value="등">등</option>
+          <option value="하체">하체</option>
+          <option value="어깨">어깨</option>
+          <option value="팔">팔</option>
+          <option value="복근">복근</option>
+        </select>
+        <button type="button" class="btn-icon" data-el="remove" aria-label="이 운동 삭제">✕</button>
+      </div>
+
+      <div class="set-head" aria-hidden="true">
+        <span>세트</span><span>무게(kg)</span><span>횟수</span><span>완료</span><span>볼륨</span><span></span>
+      </div>
+      <div class="set-rows" data-el="sets"></div>
+
+      <div class="ex-card-foot">
+        <button type="button" class="btn btn-secondary btn-sm" data-el="addSet">+ 세트 추가</button>
+        <span class="ex-card-sub">소계 <strong data-el="subtotal">—</strong></span>
+      </div>
+    </div>
+  </template>
+
+  <!-- 운동 카드 안의 세트 한 줄 -->
+  <template id="tpl-set-row">
+    <div class="set-row">
+      <span class="set-no" data-el="no"></span>
+      <input type="number" class="set-num" data-el="weight" min="0" step="0.5" placeholder="70" aria-label="무게(kg)" />
+      <input type="number" class="set-num" data-el="reps" min="0" step="1" placeholder="8" aria-label="횟수" />
+      <label class="set-done"><input type="checkbox" data-el="done" aria-label="완료" /></label>
+      <span class="set-volume" data-el="volume">—</span>
+      <button type="button" class="btn-icon" data-el="remove" aria-label="이 세트 삭제">✕</button>
+    </div>
+  </template>
+
+  <!-- ================= 식단 ================= -->
+
+  <template id="tpl-meal-list">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">내 식단</h1>
+        <button type="button" class="btn btn-primary" data-el="new">+ 식단 기록</button>
+      </div>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <div class="empty" data-el="empty" hidden>
+        <p class="empty-icon" aria-hidden="true">🥗</p>
+        <p class="empty-title">아직 기록한 식단이 없어요</p>
+        <p class="empty-sub">오늘 먹은 것을 남겨보세요.</p>
+        <button type="button" class="btn btn-primary" data-el="emptyNew">+ 첫 식단 기록</button>
+      </div>
+
+      <div class="day-groups" data-el="groups"></div>
+
+      <!-- 목록을 나눠 받을 때만 보인다. 한 페이지로 끝나면 통째로 숨는다.
+           data-el 이름(more / count / loadMore)은 세 화면이 똑같이 쓴다.
+           그래야 screen.js의 createPager가 화면마다 다른 이름을 알 필요가 없다. -->
+      <div class="list-more" data-el="more" hidden>
+        <p class="list-count" data-el="count"></p>
+        <button type="button" class="btn btn-ghost" data-el="loadMore">더 보기</button>
+      </div>
+    </section>
+  </template>
+
+  <!-- 목록의 날짜 묶음 하나 (그 날의 결산이 머리에 붙는다) -->
+  <template id="tpl-meal-day">
+    <section class="day-group">
+      <div class="day-head">
+        <span class="day-date" data-el="date"></span>
+        <span class="day-total" data-el="total"></span>
+      </div>
+      <div class="macro-bar" data-el="bar" hidden>
+        <span class="macro-seg carbs" data-el="carbs"></span>
+        <span class="macro-seg protein" data-el="protein"></span>
+        <span class="macro-seg fat" data-el="fat"></span>
+      </div>
+      <p class="macro-legend" data-el="legend"></p>
+      <div class="card-list" data-el="items"></div>
+    </section>
+  </template>
+
+  <template id="tpl-meal-detail">
+    <section class="view">
+      <button type="button" class="btn btn-ghost back" data-el="back">← 목록</button>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <article class="card detail-card" data-el="card" hidden>
+        <div class="meta-row">
+          <span class="date" data-el="date"></span>
+          <span class="badge" data-el="mealType"></span>
+        </div>
+        <h1 class="detail-title" data-el="total"></h1>
+
+        <div data-el="foodsBlock">
+          <h2 class="section-title">음식</h2>
+          <div class="table-wrap">
+            <table class="ex-table">
+              <thead>
+                <tr>
+                  <th scope="col">음식</th>
+                  <th scope="col" class="num">섭취량</th>
+                  <th scope="col" class="num">kcal</th>
+                  <th scope="col" class="num">탄</th>
+                  <th scope="col" class="num">단</th>
+                  <th scope="col" class="num">지</th>
+                </tr>
+              </thead>
+              <tbody data-el="foods"></tbody>
+            </table>
+          </div>
+
+          <div class="macro-bar" data-el="bar" hidden>
+            <span class="macro-seg carbs" data-el="carbs"></span>
+            <span class="macro-seg protein" data-el="protein"></span>
+            <span class="macro-seg fat" data-el="fat"></span>
+          </div>
+          <p class="macro-legend" data-el="legend"></p>
+        </div>
+
+        <div data-el="memoBlock" hidden>
+          <h2 class="section-title">메모</h2>
+          <p class="memo" data-el="memo"></p>
+        </div>
+
+        <div class="detail-actions" data-el="actions">
+          <button type="button" class="btn btn-secondary" data-el="edit">수정</button>
+          <button type="button" class="btn btn-danger" data-el="delete">삭제</button>
+        </div>
+
+        <div class="confirm-bar" data-el="confirmBar" hidden>
+          <span class="confirm-text">정말 삭제할까요? 되돌릴 수 없습니다.</span>
+          <div class="confirm-actions">
+            <button type="button" class="btn btn-secondary" data-el="cancelDelete">아니오</button>
+            <button type="button" class="btn btn-danger" data-el="confirmDelete">삭제</button>
+          </div>
+        </div>
+      </article>
+    </section>
+  </template>
+
+  <template id="tpl-meal-form">
+    <section class="view">
+      <button type="button" class="btn btn-ghost back" data-el="back">← 취소</button>
+
+      <form class="card form-card" data-el="form" novalidate>
+        <h1 class="view-title" data-el="heading">식단 기록</h1>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="mDate">날짜</label>
+            <input type="date" id="mDate" data-el="date" />
+          </div>
+          <div class="field">
+            <label for="mType">끼니</label>
+            <select id="mType" data-el="mealType">
+              <option value="아침">아침</option>
+              <option value="점심">점심</option>
+              <option value="저녁">저녁</option>
+              <option value="간식">간식</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="section-head">
+            <label>음식</label>
+            <span class="total-volume">합계 <strong data-el="total">0 kcal</strong></span>
+          </div>
+
+          <div class="food-head" aria-hidden="true">
+            <span>음식명</span><span>섭취량</span><span>단위</span>
+            <span>kcal</span><span>탄(g)</span><span>단(g)</span><span>지(g)</span><span></span>
+          </div>
+          <div class="food-rows" data-el="foods"></div>
+          <button type="button" class="btn btn-secondary btn-sm" data-el="addFood">+ 음식 추가</button>
+
+          <p class="hint" data-el="hint" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="mMemo">메모</label>
+          <textarea id="mMemo" data-el="memo" rows="3" placeholder="어디서 먹었는지, 컨디션 등"></textarea>
+        </div>
+
+        <p class="form-error" data-el="error" hidden></p>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" data-el="cancel">취소</button>
+          <button type="submit" class="btn btn-primary" data-el="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <template id="tpl-food-row">
+    <div class="food-row">
+      <input type="text" class="food-name" data-el="name" placeholder="닭가슴살" aria-label="음식명" />
+      <input type="number" class="food-num" data-el="amount" min="0" step="1" placeholder="150" aria-label="섭취량" />
+      <select class="food-unit" data-el="unit" aria-label="단위">
+        <option value="g">g</option>
+        <option value="인분">인분</option>
+      </select>
+      <input type="number" class="food-num" data-el="kcal" min="0" step="1" placeholder="165" aria-label="칼로리" />
+      <input type="number" class="food-num" data-el="carbs" min="0" step="0.1" placeholder="0" aria-label="탄수화물(g)" />
+      <input type="number" class="food-num" data-el="protein" min="0" step="0.1" placeholder="31" aria-label="단백질(g)" />
+      <input type="number" class="food-num" data-el="fat" min="0" step="0.1" placeholder="3" aria-label="지방(g)" />
+      <button type="button" class="btn-icon" data-el="remove" aria-label="이 음식 삭제">✕</button>
+    </div>
+  </template>
+
+  <!-- ================= 대시보드 ================= -->
+
+  <template id="tpl-dashboard">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">대시보드</h1>
+        <div class="date-nav">
+          <button type="button" class="btn-icon" data-el="prev" aria-label="이전 날">◀</button>
+          <input type="date" data-el="date" aria-label="날짜" />
+          <button type="button" class="btn-icon" data-el="next" aria-label="다음 날">▶</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-el="today">오늘</button>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <article class="card">
+          <div class="section-head">
+            <h2 class="dash-title">운동</h2>
+            <span class="total-volume">총 볼륨 <strong data-el="volume">—</strong></span>
+          </div>
+          <p class="status" data-el="workoutStatus" hidden></p>
+          <div class="dash-list" data-el="workouts"></div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <h2 class="dash-title">식단</h2>
+            <span class="total-volume">총 섭취 <strong data-el="kcal">—</strong></span>
+          </div>
+          <p class="status" data-el="mealStatus" hidden></p>
+          <div class="dash-list" data-el="meals"></div>
+          <div class="macro-bar" data-el="bar" hidden>
+            <span class="macro-seg carbs" data-el="carbs"></span>
+            <span class="macro-seg protein" data-el="protein"></span>
+            <span class="macro-seg fat" data-el="fat"></span>
+          </div>
+          <p class="macro-legend" data-el="legend"></p>
+        </article>
+      </div>
+
+      <article class="card dash-balance">
+        <div class="section-head">
+          <h2 class="dash-title">칼로리 밸런스</h2>
+          <span class="estimate-tag">추정치</span>
+        </div>
+
+        <div data-el="balance" hidden>
+          <p class="balance-formula" data-el="formula"></p>
+          <p class="balance-net" data-el="net"></p>
+          <div class="gauge" aria-hidden="true">
+            <span class="gauge-zero"></span>
+            <span class="gauge-marker" data-el="marker"></span>
+          </div>
+          <p class="gauge-scale" aria-hidden="true"><span>-1,000</span><span>0</span><span>+1,000</span></p>
+        </div>
+
+        <p class="dash-empty" data-el="balanceMissing" hidden></p>
+      </article>
+
+      <article class="card">
+        <div class="section-head">
+          <h2 class="dash-title">오늘의 몸</h2>
+          <a class="link-inline" href="#/body">기록하기</a>
+        </div>
+        <p class="status" data-el="bodyStatus" hidden></p>
+        <p class="dash-body" data-el="bodyInfo"></p>
+      </article>
+    </section>
+  </template>
+
+  <!-- ================= 루틴 템플릿 ================= -->
+
+  <template id="tpl-routine-list">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">내 루틴</h1>
+        <button type="button" class="btn btn-primary" data-el="new">+ 새 루틴</button>
+      </div>
+
+      <p class="hint">자주 하는 운동 구성을 저장해 두고, 일지를 쓸 때 그대로 불러올 수 있습니다.</p>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <div class="empty" data-el="empty" hidden>
+        <p class="empty-icon" aria-hidden="true">📋</p>
+        <p class="empty-title">저장된 루틴이 없어요</p>
+        <p class="empty-sub">자주 하는 구성을 만들어 두면 편합니다.</p>
+        <button type="button" class="btn btn-primary" data-el="emptyNew">+ 첫 루틴 만들기</button>
+      </div>
+
+      <div class="card-list" data-el="items"></div>
+    </section>
+  </template>
+
+  <template id="tpl-routine-row">
+    <div class="routine-row">
+      <div class="routine-main">
+        <div class="routine-name" data-el="name"></div>
+        <div class="routine-sub" data-el="sub"></div>
+      </div>
+
+      <div class="routine-actions" data-el="actions">
+        <button type="button" class="btn btn-primary btn-sm" data-el="start">이 루틴으로 시작</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-el="edit">수정</button>
+        <button type="button" class="btn-icon" data-el="remove" aria-label="이 루틴 삭제">✕</button>
+      </div>
+
+      <div class="confirm-inline" data-el="confirm" hidden>
+        <span class="confirm-text">이 루틴을 삭제할까요?</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-el="cancelDelete">아니오</button>
+        <button type="button" class="btn btn-danger btn-sm" data-el="confirmDelete">삭제</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-routine-form">
+    <section class="view">
+      <button type="button" class="btn btn-ghost back" data-el="back">← 취소</button>
+
+      <form class="card form-card" data-el="form" novalidate>
+        <h1 class="view-title" data-el="heading">새 루틴</h1>
+
+        <div class="field">
+          <label for="rName">루틴 이름</label>
+          <input type="text" id="rName" data-el="name" placeholder="등 + 이두 루틴" />
+        </div>
+
+        <div class="field">
+          <label>운동</label>
+          <div class="ex-cards" data-el="exercises"></div>
+          <button type="button" class="btn btn-secondary btn-sm" data-el="addEx">+ 운동 추가</button>
+        </div>
+
+        <p class="hint">루틴은 계획이라 날짜와 완료 체크가 없습니다. 무게·횟수는 목표값으로 채워 두세요.</p>
+
+        <p class="form-error" data-el="error" hidden></p>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" data-el="cancel">취소</button>
+          <button type="submit" class="btn btn-primary" data-el="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <!-- 루틴용 운동 카드: 완료 체크와 볼륨이 없다 -->
+  <template id="tpl-routine-exercise-card">
+    <div class="ex-card ex-card-edit">
+      <div class="ex-card-head">
+        <input type="text" class="ex-name" data-el="name" placeholder="데드리프트" aria-label="운동 이름" />
+        <select class="ex-muscle" data-el="muscle" aria-label="부위">
+          <option value="">부위</option>
+          <option value="가슴">가슴</option>
+          <option value="등">등</option>
+          <option value="하체">하체</option>
+          <option value="어깨">어깨</option>
+          <option value="팔">팔</option>
+          <option value="복근">복근</option>
+        </select>
+        <button type="button" class="btn-icon" data-el="remove" aria-label="이 운동 삭제">✕</button>
+      </div>
+
+      <div class="rset-head" aria-hidden="true">
+        <span>세트</span><span>무게(kg)</span><span>횟수</span><span></span>
+      </div>
+      <div class="set-rows" data-el="sets"></div>
+
+      <div class="ex-card-foot">
+        <button type="button" class="btn btn-secondary btn-sm" data-el="addSet">+ 세트 추가</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-routine-set-row">
+    <div class="rset-row">
+      <span class="set-no" data-el="no"></span>
+      <input type="number" class="set-num" data-el="weight" min="0" step="0.5" placeholder="120" aria-label="무게(kg)" />
+      <input type="number" class="set-num" data-el="reps" min="0" step="1" placeholder="5" aria-label="횟수" />
+      <button type="button" class="btn-icon" data-el="remove" aria-label="이 세트 삭제">✕</button>
+    </div>
+  </template>
+
+  <!-- ================= 신체 지표 · 프로필 ================= -->
+
+  <template id="tpl-body">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">내 몸</h1>
+      </div>
+
+      <form class="card form-card" data-el="form" novalidate>
+        <div class="grid-2">
+          <div class="field">
+            <label for="bDate">날짜</label>
+            <input type="date" id="bDate" data-el="date" />
+          </div>
+          <div class="field">
+            <label for="bWeight">체중(kg)</label>
+            <input type="number" id="bWeight" data-el="weight" min="0" step="0.1" placeholder="72.4" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="bMemo">오늘의 컨디션</label>
+          <textarea id="bMemo" data-el="memo" rows="2" placeholder="어깨 뻐근함, 수면 6시간 등"></textarea>
+        </div>
+
+        <p class="hint">같은 날짜로 저장하면 그날 기록을 덮어씁니다. 하루에 한 건만 남습니다.</p>
+
+        <p class="form-error" data-el="error" hidden></p>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" data-el="submit">저장</button>
+        </div>
+      </form>
+
+      <h2 class="section-title">기록</h2>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <div class="empty" data-el="empty" hidden>
+        <p class="empty-icon" aria-hidden="true">⚖️</p>
+        <p class="empty-title">아직 기록이 없어요</p>
+        <p class="empty-sub">위에서 오늘의 체중을 남겨보세요.</p>
+      </div>
+
+      <div class="card-list" data-el="items"></div>
+
+      <!-- 목록을 나눠 받을 때만 보인다. 한 페이지로 끝나면 통째로 숨는다.
+           data-el 이름(more / count / loadMore)은 세 화면이 똑같이 쓴다.
+           그래야 screen.js의 createPager가 화면마다 다른 이름을 알 필요가 없다. -->
+      <div class="list-more" data-el="more" hidden>
+        <p class="list-count" data-el="count"></p>
+        <button type="button" class="btn btn-ghost" data-el="loadMore">더 보기</button>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-body-row">
+    <div class="body-row">
+      <span class="body-date" data-el="date"></span>
+      <span class="body-weight" data-el="weight"></span>
+      <span class="body-memo" data-el="memo"></span>
+      <button type="button" class="btn btn-secondary btn-sm" data-el="load">불러오기</button>
+      <button type="button" class="btn-icon" data-el="remove" aria-label="이 기록 삭제">✕</button>
+    </div>
+  </template>
+
+  <template id="tpl-profile">
+    <section class="view">
+      <div class="view-head">
+        <h1 class="view-title">프로필</h1>
+      </div>
+
+      <p class="status" data-el="status" hidden></p>
+
+      <form class="card form-card" data-el="form" novalidate hidden>
+        <div class="field">
+          <label for="pName">이름</label>
+          <input type="text" id="pName" data-el="name" />
+        </div>
+
+        <div class="field">
+          <label for="pEmail">이메일</label>
+          <input type="email" id="pEmail" data-el="email" disabled />
+          <p class="hint">이메일은 변경할 수 없습니다.</p>
+        </div>
+
+        <h2 class="section-title">기초대사량 계산에 쓰이는 값</h2>
+
+        <div class="grid-3">
+          <div class="field">
+            <label for="pSex">성별</label>
+            <select id="pSex" data-el="sex">
+              <option value="">선택 안 함</option>
+              <option value="male">남성</option>
+              <option value="female">여성</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pBirth">출생연도</label>
+            <input type="number" id="pBirth" data-el="birthYear" min="1900" step="1" placeholder="1996" />
+          </div>
+          <div class="field">
+            <label for="pHeight">키(cm)</label>
+            <input type="number" id="pHeight" data-el="heightCm" min="0" step="0.1" placeholder="178" />
+          </div>
+        </div>
+
+        <p class="hint">
+          비워두면 대시보드에서 기초대사량을 <strong>계산하지 않습니다.</strong>
+          임의의 기본값으로 대신 계산하면 틀린 숫자를 보여주게 되기 때문입니다.
+          체중은 <a class="link-inline" href="#/body">내 몸</a>에서 기록한 값을 씁니다.
+        </p>
+
+        <p class="form-error" data-el="error" hidden></p>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" data-el="submit">저장</button>
+        </div>
+      </form>
+
+      <!-- 비밀번호 변경. 위 폼과 저장 버튼이 섞이지 않도록 별도의 <form>으로 둔다.
+           한 폼에 넣으면 이름만 바꾸려 해도 비밀번호를 함께 보내야 한다. -->
+      <h2 class="section-title">비밀번호 변경</h2>
+
+      <form class="card form-card" data-el="pwForm" novalidate hidden>
+        <div class="field">
+          <label for="pCurrent">현재 비밀번호</label>
+          <input type="password" id="pCurrent" data-el="currentPassword" autocomplete="current-password" />
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="pNew">새 비밀번호</label>
+            <input type="password" id="pNew" data-el="newPassword" autocomplete="new-password" placeholder="8자 이상" />
+          </div>
+          <div class="field">
+            <label for="pNew2">새 비밀번호 확인</label>
+            <input type="password" id="pNew2" data-el="newPassword2" autocomplete="new-password" />
+          </div>
+        </div>
+
+        <p class="hint">
+          비밀번호를 바꾸면 <strong>다른 기기에 남아 있던 로그인은 모두 풀립니다.</strong>
+          지금 쓰고 있는 이 화면은 그대로 유지됩니다.
+        </p>
+
+        <p class="form-error" data-el="pwError" hidden></p>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" data-el="pwSubmit">비밀번호 변경</button>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <template id="tpl-placeholder">
+    <section class="view">
+      <div class="empty">
+        <p class="empty-icon" aria-hidden="true">🚧</p>
+        <p class="empty-title" data-el="title"></p>
+        <p class="empty-sub">아직 준비 중인 화면입니다.</p>
+      </div>
+    </section>
+  </template>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

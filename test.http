@@ -1,0 +1,1082 @@
+### 운동 일지 API 테스트 (VS Code REST Client)
+#
+# 사용법: 위에서부터 순서대로 "Send Request"를 클릭한다.
+# 서버를 재시작하지 않고 이 파일을 통째로 다시 실행해도 전부 통과해야 한다.
+#   - 이메일은 {{$guid}}로 매번 새로 만들고, 실제 사용값은 signup 응답에서 캡처한다.
+#     ({{$guid}}/{{$timestamp}}는 요청마다 새로 평가되므로, 파일 변수에 직접 넣으면
+#      회원가입과 로그인이 서로 다른 이메일을 쓰게 되어 깨진다. 그래서 응답에서 캡처한다)
+#   - id는 절대 하드코딩하지 않고 글쓰기 응답에서 캡처한다.
+#     (id는 MongoDB의 ObjectId라 1, 2, 3이 아니라 24자리 문자열이다)
+#
+# 데이터는 MongoDB에 저장되므로 서버를 껐다 켜도 남아 있다.
+# 이 파일을 여러 번 실행하면 기록이 쌓이는데, 이메일이 매번 달라 서로 방해하지 않는다.
+#
+# 운동 일지 구조
+#   exercises[] : { name, targetMuscle, sets[] }
+#   sets[]      : { setNo, weightKg, reps, done }
+#   setNo는 서버가 순서대로 다시 매긴다. 클라이언트가 보낸 값은 무시된다.
+#   볼륨(무게×횟수)은 저장하지 않는다. 화면에서 계산한다.
+#
+# 목록 조회는 ?page=&limit= 으로 나눠 받을 수 있다 (6-2 ~ 6-8).
+#   둘 다 생략하면 전부 돌려준다. 총 개수는 응답 "헤더"(X-Total-Count)에 담긴다.
+#
+# 로그인하면 두 가지가 나온다.
+#   액세스 토큰(15분) : 응답 본문. Authorization 헤더에 담아 쓴다.
+#   갱신 토큰(14일)   : httpOnly 쿠키. 본문에 없고 화면에서도 읽을 수 없다.
+#                       REST Client가 자동으로 보관했다가 붙여 보낸다(A-1 참고).
+# A-1 ~ A-11은 위 정상 흐름을 모두 마친 뒤에 실행한다. 비밀번호를 바꾸기 때문이다.
+
+@baseUrl = http://localhost:3000/api
+@password = password1234
+
+###############################################################################
+# 1. 헬스체크 - 기대: 200 { "status": "ok" }
+###############################################################################
+
+GET http://localhost:3000/health
+
+###############################################################################
+# 2. 회원가입 (사용자 A) - 기대: 201, 응답에 password 필드가 없어야 한다
+###############################################################################
+
+# @name signup
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "userA-{{$guid}}@example.com",
+  "password": "{{password}}",
+  "name": "김헬스"
+}
+
+### 실제로 가입된 이메일을 응답에서 캡처한다
+@email = {{signup.response.body.email}}
+
+###############################################################################
+# 3. 로그인 + 토큰 캡처 - 기대: 200 { token, user }
+###############################################################################
+
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+###
+@authToken = {{login.response.body.token}}
+
+###############################################################################
+# 4. 운동 일지 등록 (1) + id 캡처 - 기대: 201
+#    setNo를 보내지 않아도 서버가 1,2,3을 매긴다.
+#    3번 세트는 done:false 이므로 볼륨 계산에서 제외된다.
+###############################################################################
+
+# @name createWorkout
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-30",
+  "title": "가슴 + 삼두 루틴",
+  "durationMin": 60,
+  "exercises": [
+    {
+      "name": "벤치프레스",
+      "targetMuscle": "가슴",
+      "sets": [
+        { "weightKg": 70, "reps": 8, "done": true },
+        { "weightKg": 70, "reps": 8, "done": true },
+        { "weightKg": 70, "reps": 6, "done": false }
+      ]
+    },
+    {
+      "name": "케이블 푸시다운",
+      "targetMuscle": "팔",
+      "sets": [
+        { "weightKg": 25, "reps": 15, "done": true }
+      ]
+    }
+  ],
+  "memo": "벤치 마지막 세트에서 2회 실패"
+}
+
+###
+@workoutId = {{createWorkout.response.body.id}}
+
+###############################################################################
+# 5. 운동 일지 등록 (2) - 리스트 정렬 확인용. 기대: 201
+#    durationMin을 보내지 않으면 null로 저장된다.
+###############################################################################
+
+# @name createWorkout2
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "등 + 이두 루틴",
+  "exercises": [
+    {
+      "name": "데드리프트",
+      "targetMuscle": "등",
+      "sets": [
+        { "weightKg": 120, "reps": 5, "done": true },
+        { "weightKg": 120, "reps": 5, "done": true }
+      ]
+    }
+  ]
+}
+
+###
+@workoutId2 = {{createWorkout2.response.body.id}}
+
+###############################################################################
+# 5-1. setNo 정규화 확인 - 기대: 201, 응답의 setNo가 99/7이 아니라 1,2 여야 한다
+###############################################################################
+
+# @name renumber
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-29",
+  "title": "setNo 정규화 확인",
+  "exercises": [
+    {
+      "name": "스쿼트",
+      "targetMuscle": "하체",
+      "sets": [
+        { "setNo": 99, "weightKg": 100, "reps": 5 },
+        { "setNo": 7, "weightKg": 100, "reps": 5 }
+      ]
+    }
+  ]
+}
+
+### 확인용 일지 정리 - 기대: 200
+DELETE {{baseUrl}}/workouts/{{renumber.response.body.id}}
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6. 목록 조회 - 기대: 200, 2건. 8/31 일지가 8/30 일지보다 먼저 나와야 한다
+###############################################################################
+
+GET {{baseUrl}}/workouts
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-1. 날짜 필터 - 기대: 200, 8/30 일지 1건만
+###############################################################################
+
+GET {{baseUrl}}/workouts?date=2026-08-30
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-2. 페이지네이션: 1페이지 1개씩 - 기대: 200, 1건 (8/31 일지)
+#
+#      응답 본문뿐 아니라 "응답 헤더"도 확인한다. (REST Client 응답 창 위쪽)
+#        X-Total-Count: 2   전체 2건
+#        X-Total-Pages: 2   1개씩 나누면 2페이지
+#        X-Page: 1  /  X-Limit: 1
+#
+#      총 개수를 본문이 아니라 헤더에 담는 이유:
+#      본문 모양을 항상 배열로 유지해야 이미 이 API를 쓰는 화면과 아래 테스트가
+#      page 유무에 따라 응답 형태를 달리 처리하지 않아도 되기 때문이다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?page=1&limit=1
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-3. 페이지네이션: 2페이지 - 기대: 200, 1건 (8/30 일지)
+#      6-2와 겹치는 항목이 없어야 한다. 정렬 없이 잘라 내면 중복이 생길 수 있는데,
+#      서버가 sort와 skip을 함께 걸기 때문에 순서가 보장된다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?page=2&limit=1
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-4. 범위를 벗어난 페이지 - 기대: 200, 빈 배열 []
+#      404가 아니다. "3페이지라는 주소가 없는 것"이 아니라
+#      "3페이지에 해당하는 기록이 없는 것"이므로 빈 목록이 맞다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?page=3&limit=1
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-5. 날짜 필터 + 페이지네이션 함께 쓰기 - 기대: 200, 8/30 일지 1건 (X-Total-Count: 1)
+#      쿼리스트링을 쓴 덕분에 조건을 겹쳐 걸 수 있다.
+#      강사님 예시처럼 경로에 페이지를 넣으면(/board/list/2) 이렇게 조합하기 어렵다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?date=2026-08-30&page=1&limit=5
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-6. 잘못된 page - 기대: 400 "page는 1 이상의 정수여야 합니다."
+#      page=0을 슬쩍 1로 고쳐서 응답하면, 화면은 2페이지를 요청했다고 믿으면서
+#      1페이지를 그리게 된다. 틀린 요청은 틀렸다고 알려주는 편이 낫다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?page=0
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-7. 숫자가 아닌 page - 기대: 400
+###############################################################################
+
+GET {{baseUrl}}/workouts?page=abc
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 6-8. 상한선을 넘는 limit - 기대: 400 "limit은 100 이하여야 합니다."
+#      limit=1000000 같은 요청 하나로 서버가 힘들어지는 것을 막는다.
+###############################################################################
+
+GET {{baseUrl}}/workouts?limit=101
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 7. 상세 조회 - 기대: 200, id가 {{workoutId}}인 일지
+###############################################################################
+
+GET {{baseUrl}}/workouts/{{workoutId}}
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 7-1. 수정 - 기대: 200, 무게와 시간이 바뀌고 id·createdAt은 그대로
+###############################################################################
+
+PUT {{baseUrl}}/workouts/{{workoutId}}
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-30",
+  "title": "가슴 + 삼두 루틴 (수정됨)",
+  "durationMin": 75,
+  "exercises": [
+    {
+      "name": "벤치프레스",
+      "targetMuscle": "가슴",
+      "sets": [
+        { "weightKg": 75, "reps": 8, "done": true },
+        { "weightKg": 75, "reps": 8, "done": true }
+      ]
+    }
+  ],
+  "memo": "무게 5kg 올림"
+}
+
+###############################################################################
+# 7-2. 수정 결과 재조회 - 기대: 200, 7-1의 내용이 실제로 반영되어 있어야 한다
+###############################################################################
+
+GET {{baseUrl}}/workouts/{{workoutId}}
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 7-3. id·userId·createdAt 위조 시도 - 기대: 200, 위조 값이 반영되지 않아야 한다
+###############################################################################
+
+PUT {{baseUrl}}/workouts/{{workoutId}}
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "id": 99999,
+  "userId": 99999,
+  "createdAt": "1999-01-01T00:00:00.000Z",
+  "date": "2026-08-30",
+  "title": "위조 시도"
+}
+
+###############################################################################
+# 8. 삭제 - 기대: 200 { "message": "삭제되었습니다.", "id": ... }
+###############################################################################
+
+DELETE {{baseUrl}}/workouts/{{workoutId}}
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 9. 삭제 확인 - 방금 지운 id 재조회. 기대: 404
+###############################################################################
+
+GET {{baseUrl}}/workouts/{{workoutId}}
+Authorization: Bearer {{authToken}}
+
+
+###############################################################################
+#                      인증 심화 (갱신 토큰 · 비밀번호 변경)
+###############################################################################
+
+###############################################################################
+# A-1. 액세스 토큰 재발급 - 기대: 200 { token, user }
+#
+#      Authorization 헤더가 없는 것에 주목한다. 만료된 액세스 토큰으로는
+#      아무것도 증명할 수 없으므로, 대신 로그인할 때 심어진 httpOnly 쿠키를 쓴다.
+#      REST Client가 쿠키를 자동으로 보관했다가 붙여 보내기 때문에 그냥 실행하면 된다.
+#
+#      확인한 갱신 토큰은 그 자리에서 버려지고 새것이 쿠키로 심어진다(회전).
+###############################################################################
+
+# @name refreshed
+POST {{baseUrl}}/auth/refresh
+
+###############################################################################
+# A-2. 새로 받은 액세스 토큰으로 조회 - 기대: 200
+###############################################################################
+
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{refreshed.response.body.token}}
+
+###############################################################################
+# A-3. 비밀번호 변경: 현재 비밀번호가 틀림 - 기대: 400
+#
+#      401이 아니라 400인 이유: 이 요청은 토큰으로 인증을 이미 통과했다.
+#      틀린 것은 "인증"이 아니라 본문에 담아 보낸 값이다.
+#      (401을 주면 화면이 세션 만료로 보고 사용자를 로그아웃시켜 버린다)
+###############################################################################
+
+PUT {{baseUrl}}/auth/password
+Content-Type: application/json
+Authorization: Bearer {{refreshed.response.body.token}}
+
+{
+  "currentPassword": "wrong-password",
+  "newPassword": "brand-new-password"
+}
+
+###############################################################################
+# A-4. 비밀번호 변경: 새 비밀번호가 너무 짧음 - 기대: 400
+###############################################################################
+
+PUT {{baseUrl}}/auth/password
+Content-Type: application/json
+Authorization: Bearer {{refreshed.response.body.token}}
+
+{
+  "currentPassword": "{{password}}",
+  "newPassword": "123"
+}
+
+###############################################################################
+# A-5. 비밀번호 변경 - 기대: 200 { message, token }
+#
+#      새 토큰을 함께 준다. 비밀번호를 바꾸면 그 전에 나간 토큰이 전부 무효가 되는데,
+#      지금 쓰던 토큰까지 막아 버리면 스스로 바꾼 사람이 곧바로 로그아웃되기 때문이다.
+###############################################################################
+
+# @name changed
+PUT {{baseUrl}}/auth/password
+Content-Type: application/json
+Authorization: Bearer {{refreshed.response.body.token}}
+
+{
+  "currentPassword": "{{password}}",
+  "newPassword": "brand-new-password"
+}
+
+###############################################################################
+# A-6. 변경 전에 받았던 토큰 - 기대: 401 "비밀번호가 변경되었습니다..."
+#
+#      토큰 안의 세대 번호(tv)가 DB의 번호보다 뒤처져서 걸린다.
+#      다른 기기에 남아 있던 로그인을 끊는 장치다.
+###############################################################################
+
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# A-7. 변경 직후 받은 새 토큰 - 기대: 200
+###############################################################################
+
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{changed.response.body.token}}
+
+###############################################################################
+# A-8. 옛 비밀번호로 로그인 - 기대: 401
+###############################################################################
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+###############################################################################
+# A-9. 새 비밀번호로 로그인 - 기대: 200
+###############################################################################
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "brand-new-password"
+}
+
+###############################################################################
+# A-10. 로그아웃 - 기대: 200
+#       서버에 저장된 갱신 토큰을 지우고 쿠키도 비운다.
+#       화면에서 토큰만 지우면 쿠키가 남아 새로고침 한 번에 되살아난다.
+###############################################################################
+
+POST {{baseUrl}}/auth/logout
+
+###############################################################################
+# A-11. 로그아웃 후 갱신 시도 - 기대: 401
+###############################################################################
+
+POST {{baseUrl}}/auth/refresh
+
+###############################################################################
+#                              예외 케이스
+###############################################################################
+
+### 10. 토큰 없이 목록 조회 - 기대: 401
+GET {{baseUrl}}/workouts
+
+### 11. 잘못된 토큰 - 기대: 401
+GET {{baseUrl}}/workouts
+Authorization: Bearer invalid.token.here
+
+### 12. 존재하지 않는 id 조회 - 기대: 404
+GET {{baseUrl}}/workouts/99999
+Authorization: Bearer {{authToken}}
+
+### 12-1. 숫자가 아닌 id - 기대: 404
+GET {{baseUrl}}/workouts/abc
+Authorization: Bearer {{authToken}}
+
+### 13. 중복 이메일로 재가입 - 기대: 409
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "name": "중복유저"
+}
+
+### 14. 틀린 비밀번호로 로그인 - 기대: 401
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "wrong-password"
+}
+
+### 15. 필수값 누락으로 글쓰기 (title 없음) - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31"
+}
+
+### 15-1. 잘못된 date 형식 - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026/08/31",
+  "title": "하체 루틴"
+}
+
+### 15-2. 짧은 비밀번호로 회원가입 - 기대: 400
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "short-{{$guid}}@example.com",
+  "password": "1234",
+  "name": "짧은비번"
+}
+
+### 15-3. 허용되지 않은 부위 - 기대: 400 (가슴/등/하체/어깨/팔/복근만 허용)
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "부위 오류",
+  "exercises": [{ "name": "벤치프레스", "targetMuscle": "겨드랑이", "sets": [] }]
+}
+
+### 15-4. sets가 배열이 아님 - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "세트 오류",
+  "exercises": [{ "name": "벤치프레스", "sets": "not-array" }]
+}
+
+### 15-5. 세트 무게가 문자열 - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "무게 타입 오류",
+  "exercises": [{ "name": "벤치프레스", "sets": [{ "weightKg": "70", "reps": 8 }] }]
+}
+
+### 15-6. done이 boolean이 아님 - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "완료 타입 오류",
+  "exercises": [{ "name": "벤치프레스", "sets": [{ "reps": 8, "done": "yes" }] }]
+}
+
+### 15-7. durationMin이 음수 - 기대: 400
+POST {{baseUrl}}/workouts
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "시간 오류",
+  "durationMin": -10
+}
+
+### 15-8. 없는 id 수정 - 기대: 404
+PUT {{baseUrl}}/workouts/99999
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "title": "없는 일지 수정 시도"
+}
+
+### 15-9. 토큰 없이 수정 - 기대: 401
+PUT {{baseUrl}}/workouts/{{workoutId2}}
+Content-Type: application/json
+
+{
+  "date": "2026-08-31",
+  "title": "무단 수정"
+}
+
+
+###############################################################################
+#           16. 타인 소유 일지 접근 차단 (사용자 B로 A의 일지에 접근)
+###############################################################################
+
+### 16-1. 사용자 B 회원가입 - 기대: 201
+# @name signupB
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "userB-{{$guid}}@example.com",
+  "password": "{{password}}",
+  "name": "박근육"
+}
+
+###
+@emailB = {{signupB.response.body.email}}
+
+### 16-2. 사용자 B 로그인 - 기대: 200
+# @name loginB
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{emailB}}",
+  "password": "{{password}}"
+}
+
+###
+@authTokenB = {{loginB.response.body.token}}
+
+### 16-3. B의 목록 조회 - 기대: 200, 빈 배열 [] (A의 일지가 보이면 안 된다)
+GET {{baseUrl}}/workouts
+Authorization: Bearer {{authTokenB}}
+
+### 16-4. B가 A의 일지 상세 조회 - 기대: 404 (403이 아님)
+GET {{baseUrl}}/workouts/{{workoutId2}}
+Authorization: Bearer {{authTokenB}}
+
+### 16-5. B가 A의 일지 수정 시도 - 기대: 404
+PUT {{baseUrl}}/workouts/{{workoutId2}}
+Content-Type: application/json
+Authorization: Bearer {{authTokenB}}
+
+{
+  "date": "2026-08-31",
+  "title": "남의 일지 가로채기 시도"
+}
+
+### 16-6. B가 A의 일지 삭제 시도 - 기대: 404
+DELETE {{baseUrl}}/workouts/{{workoutId2}}
+Authorization: Bearer {{authTokenB}}
+
+### 16-7. A가 자기 일지 재조회 - 기대: 200 (16-6에서 실제로 지워지지 않았음을 확인)
+GET {{baseUrl}}/workouts/{{workoutId2}}
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 17. 없는 경로 - 기대: 404 { "message": "요청한 경로를 찾을 수 없습니다." }
+###############################################################################
+
+GET {{baseUrl}}/not-exist
+Authorization: Bearer {{authToken}}
+
+
+###############################################################################
+#                              식단 (/api/meals)
+#
+#   foods[] : { name, amount, unit, kcal, carbsG, proteinG, fatG }
+#   unit    : g | 인분      (섭취량은 숫자와 단위를 나눠서 받는다)
+#   mealType: 아침 | 점심 | 저녁 | 간식
+#   총 칼로리·탄단지 비율은 저장하지 않는다. 화면에서 계산한다.
+#   사용자가 넣은 kcal을 그대로 보관한다. 탄단지로 계산한 값으로 덮어쓰지 않는다.
+###############################################################################
+
+### 30. 식단 등록 (점심) - 기대: 201
+# @name createMeal
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-09-01",
+  "mealType": "점심",
+  "foods": [
+    { "name": "닭가슴살", "amount": 150, "unit": "g", "kcal": 165, "carbsG": 0, "proteinG": 31, "fatG": 3 },
+    { "name": "현미밥", "amount": 1, "unit": "인분", "kcal": 310, "carbsG": 68, "proteinG": 6, "fatG": 2 }
+  ],
+  "memo": "점심 도시락"
+}
+
+###
+@mealId = {{createMeal.response.body.id}}
+
+### 30-1. 같은 날 아침 등록 - 기대: 201, unit 미지정이면 g로 저장된다
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-09-01",
+  "mealType": "아침",
+  "foods": [{ "name": "오트밀", "amount": 60, "kcal": 230, "carbsG": 40, "proteinG": 8, "fatG": 4 }]
+}
+
+### 30-2. 다른 날 저녁 등록 - 기대: 201
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-08-31",
+  "mealType": "저녁",
+  "foods": [{ "name": "연어", "amount": 200, "unit": "g", "kcal": 400, "proteinG": 40, "fatG": 25 }]
+}
+
+### 31. 식단 목록 - 기대: 200, 날짜 내림차순 + 같은 날은 아침 → 점심 순서
+GET {{baseUrl}}/meals
+Authorization: Bearer {{authToken}}
+
+### 31-1. 날짜 필터 - 기대: 200, 9/1 것 2건만
+GET {{baseUrl}}/meals?date=2026-09-01
+Authorization: Bearer {{authToken}}
+
+### 32. 식단 상세 - 기대: 200
+GET {{baseUrl}}/meals/{{mealId}}
+Authorization: Bearer {{authToken}}
+
+### 33. 식단 수정 - 기대: 200, mealType이 저녁으로 바뀌고 createdAt은 그대로
+PUT {{baseUrl}}/meals/{{mealId}}
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "date": "2026-09-01",
+  "mealType": "저녁",
+  "foods": [{ "name": "샐러드", "amount": 200, "unit": "g", "kcal": 120, "carbsG": 12, "proteinG": 4, "fatG": 6 }]
+}
+
+###############################################################################
+#                          식단 예외 케이스
+###############################################################################
+
+### 34. 잘못된 mealType - 기대: 400 (아침/점심/저녁/간식만 허용)
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "mealType": "야식", "foods": [] }
+
+### 34-1. mealType 누락 - 기대: 400
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "foods": [] }
+
+### 34-2. 잘못된 unit - 기대: 400 (g / 인분만 허용)
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "mealType": "점심", "foods": [{ "name": "밥", "unit": "컵" }] }
+
+### 34-3. kcal이 문자열 - 기대: 400
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "mealType": "점심", "foods": [{ "name": "밥", "kcal": "300" }] }
+
+### 34-4. 음수 영양소 - 기대: 400
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "mealType": "점심", "foods": [{ "name": "밥", "proteinG": -5 }] }
+
+### 34-5. 음식 이름 누락 - 기대: 400
+POST {{baseUrl}}/meals
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "mealType": "점심", "foods": [{ "kcal": 100 }] }
+
+### 34-6. 토큰 없이 식단 목록 - 기대: 401
+GET {{baseUrl}}/meals
+
+### 34-7. 없는 식단 조회 - 기대: 404
+GET {{baseUrl}}/meals/99999
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+#              35. 식단도 같은 소유권 정책이 적용된다 (사용자 B)
+###############################################################################
+
+### 35-1. B의 식단 목록 - 기대: 200, 빈 배열 (A의 식단이 보이면 안 된다)
+GET {{baseUrl}}/meals
+Authorization: Bearer {{authTokenB}}
+
+### 35-2. B가 A의 식단 상세 - 기대: 404
+GET {{baseUrl}}/meals/{{mealId}}
+Authorization: Bearer {{authTokenB}}
+
+### 35-3. B가 A의 식단 수정 - 기대: 404
+PUT {{baseUrl}}/meals/{{mealId}}
+Content-Type: application/json
+Authorization: Bearer {{authTokenB}}
+
+{ "date": "2026-09-01", "mealType": "점심", "foods": [] }
+
+### 35-4. B가 A의 식단 삭제 - 기대: 404
+DELETE {{baseUrl}}/meals/{{mealId}}
+Authorization: Bearer {{authTokenB}}
+
+### 35-5. A가 자기 식단 재조회 - 기대: 200 (35-4에서 지워지지 않았음을 확인)
+GET {{baseUrl}}/meals/{{mealId}}
+Authorization: Bearer {{authToken}}
+
+### 36. 식단 삭제 - 기대: 200
+DELETE {{baseUrl}}/meals/{{mealId}}
+Authorization: Bearer {{authToken}}
+
+
+###############################################################################
+#                    신체 지표 (/api/body-metrics) · 프로필
+#
+#   날짜당 1건만 남는다. 같은 날짜로 POST 하면 새로 만들지 않고 덮어쓴다.
+#   그래서 신규는 201, 덮어쓰기는 200이다. (하루 두 건이면 BMR에 쓸 체중이 모호해진다)
+###############################################################################
+
+### 50. 신체 기록 등록 - 기대: 201
+# @name createBody
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "weightKg": 72.4, "conditionMemo": "어깨 뻐근함" }
+
+###
+@bodyId = {{createBody.response.body.id}}
+
+### 50-1. 같은 날짜로 재저장 - 기대: 200 (201이 아님), id와 createdAt이 그대로여야 한다
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-01", "weightKg": 72.0, "conditionMemo": "저녁 측정" }
+
+### 50-2. 다른 날짜는 새로 생성 - 기대: 201
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-08-31", "weightKg": 72.9 }
+
+### 51. 목록 - 기대: 200, 날짜당 1건씩 최신순
+GET {{baseUrl}}/body-metrics
+Authorization: Bearer {{authToken}}
+
+### 52. 체중이 음수 - 기대: 400
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-02", "weightKg": -1 }
+
+### 52-1. 체중이 문자열 - 기대: 400
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "date": "2026-09-02", "weightKg": "70" }
+
+### 52-2. date 누락 - 기대: 400
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "weightKg": 70 }
+
+### 52-3. 토큰 없이 조회 - 기대: 401
+GET {{baseUrl}}/body-metrics
+
+###############################################################################
+# 53. 프로필 - 기초대사량 계산에 필요한 성별·출생연도·키
+#     나이 대신 출생연도를 저장한다. 나이는 해가 바뀌면 틀려진다.
+###############################################################################
+
+### 53. 내 정보 조회 - 기대: 200, password 없음, 가입 직후 profile은 모두 null
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{authToken}}
+
+### 53-1. 프로필 저장 - 기대: 200
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "김헬스",
+  "profile": { "sex": "male", "birthYear": 1996, "heightCm": 178 }
+}
+
+### 53-2. email·password 변조 시도 - 기대: 200, 그러나 email이 바뀌지 않아야 한다
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "email": "hacker@example.com", "password": "newpassword", "profile": {} }
+
+### 53-3. 기존 비밀번호로 로그인 - 기대: 200 (53-2가 비밀번호를 바꾸지 못했음을 확인)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{email}}", "password": "{{password}}" }
+
+### 54. 잘못된 성별 - 기대: 400 (male / female 만 허용)
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "profile": { "sex": "other" } }
+
+### 54-1. 출생연도가 미래 - 기대: 400
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "profile": { "birthYear": 3000 } }
+
+### 54-2. 키가 비정상 - 기대: 400
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "profile": { "heightCm": 400 } }
+
+### 54-3. 이름을 빈 값으로 - 기대: 400
+PUT {{baseUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "name": "   " }
+
+### 54-4. 토큰 없이 내 정보 - 기대: 401
+GET {{baseUrl}}/auth/me
+
+###############################################################################
+# 55. 신체 기록도 사용자별로 분리된다
+#     B가 A와 같은 날짜로 저장해도 A의 기록을 덮어쓰면 안 된다
+###############################################################################
+
+### 55-1. B의 신체 기록 목록 - 기대: 200, 빈 배열
+GET {{baseUrl}}/body-metrics
+Authorization: Bearer {{authTokenB}}
+
+### 55-2. B가 A와 같은 날짜로 저장 - 기대: 201 (A의 것을 덮어쓰지 않고 새로 만든다)
+POST {{baseUrl}}/body-metrics
+Content-Type: application/json
+Authorization: Bearer {{authTokenB}}
+
+{ "date": "2026-09-01", "weightKg": 60 }
+
+### 55-3. A의 기록 확인 - 기대: 200, weightKg가 여전히 72.0이어야 한다
+GET {{baseUrl}}/body-metrics/{{bodyId}}
+Authorization: Bearer {{authToken}}
+
+### 55-4. B가 A의 기록 조회 - 기대: 404
+GET {{baseUrl}}/body-metrics/{{bodyId}}
+Authorization: Bearer {{authTokenB}}
+
+### 55-5. B가 A의 기록 삭제 - 기대: 404
+DELETE {{baseUrl}}/body-metrics/{{bodyId}}
+Authorization: Bearer {{authTokenB}}
+
+
+###############################################################################
+#                          루틴 템플릿 (/api/routines)
+#
+#   루틴은 "계획"이지 "기록"이 아니다. 그래서 운동 일지와 두 가지가 다르다.
+#     - 날짜(date)가 없다
+#     - 세트에 완료 여부(done)가 없다. 보내도 저장되지 않는다.
+###############################################################################
+
+### 70. 루틴 등록 - 기대: 201, 응답에 date가 없고 세트에 done도 없어야 한다
+# @name createRoutine
+POST {{baseUrl}}/routines
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "등 + 이두 루틴",
+  "exercises": [
+    {
+      "name": "데드리프트",
+      "targetMuscle": "등",
+      "sets": [{ "weightKg": 120, "reps": 5 }, { "weightKg": 120, "reps": 5 }]
+    },
+    { "name": "랫풀다운", "targetMuscle": "등", "sets": [{ "weightKg": 55, "reps": 12 }] }
+  ]
+}
+
+###
+@routineId = {{createRoutine.response.body.id}}
+
+### 71. 루틴 목록 - 기대: 200
+GET {{baseUrl}}/routines
+Authorization: Bearer {{authToken}}
+
+### 72. 루틴 수정 - 기대: 200, createdAt은 그대로
+PUT {{baseUrl}}/routines/{{routineId}}
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "등 루틴 (개정)",
+  "exercises": [{ "name": "데드리프트", "targetMuscle": "등", "sets": [{ "weightKg": 130, "reps": 5 }] }]
+}
+
+### 72-1. done을 보내도 저장되지 않는다 - 기대: 200, 응답 세트에 done이 없어야 한다
+PUT {{baseUrl}}/routines/{{routineId}}
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "등 루틴 (개정)",
+  "exercises": [{ "name": "데드리프트", "sets": [{ "weightKg": 130, "reps": 5, "done": true }] }]
+}
+
+###############################################################################
+#                          루틴 예외 케이스
+###############################################################################
+
+### 73. 이름 누락 - 기대: 400
+POST {{baseUrl}}/routines
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "exercises": [] }
+
+### 73-1. 이름이 공백뿐 - 기대: 400
+POST {{baseUrl}}/routines
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "name": "   " }
+
+### 73-2. 허용되지 않은 부위 - 기대: 400
+POST {{baseUrl}}/routines
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "name": "오류", "exercises": [{ "name": "벤치프레스", "targetMuscle": "겨드랑이" }] }
+
+### 73-3. 무게가 문자열 - 기대: 400
+POST {{baseUrl}}/routines
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{ "name": "오류", "exercises": [{ "name": "벤치프레스", "sets": [{ "weightKg": "70" }] }] }
+
+### 73-4. 토큰 없이 목록 - 기대: 401
+GET {{baseUrl}}/routines
+
+### 73-5. 없는 루틴 조회 - 기대: 404
+GET {{baseUrl}}/routines/99999
+Authorization: Bearer {{authToken}}
+
+###############################################################################
+# 74. 루틴도 사용자별로 분리된다
+###############################################################################
+
+### 74-1. B의 루틴 목록 - 기대: 200, 빈 배열
+GET {{baseUrl}}/routines
+Authorization: Bearer {{authTokenB}}
+
+### 74-2. B가 A의 루틴 조회 - 기대: 404
+GET {{baseUrl}}/routines/{{routineId}}
+Authorization: Bearer {{authTokenB}}
+
+### 74-3. B가 A의 루틴 수정 - 기대: 404
+PUT {{baseUrl}}/routines/{{routineId}}
+Content-Type: application/json
+Authorization: Bearer {{authTokenB}}
+
+{ "name": "가로채기 시도" }
+
+### 74-4. B가 A의 루틴 삭제 - 기대: 404
+DELETE {{baseUrl}}/routines/{{routineId}}
+Authorization: Bearer {{authTokenB}}
+
+### 74-5. A가 자기 루틴 재조회 - 기대: 200
+GET {{baseUrl}}/routines/{{routineId}}
+Authorization: Bearer {{authToken}}
+
+### 75. 루틴 삭제 - 기대: 200
+DELETE {{baseUrl}}/routines/{{routineId}}
+Authorization: Bearer {{authToken}}
