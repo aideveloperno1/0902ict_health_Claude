@@ -4,7 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>운동 일지</title>
+  <meta name="description" content="운동·식단·체중을 한 곳에 기록하고 하루의 칼로리 수지를 확인하는 개인 일지." />
+
+  <!-- 모바일 브라우저의 주소 표시줄 색. 두 줄을 두면 기기 설정에 따라 알아서 골라 쓴다.
+       이게 없으면 어두운 화면에서 주소 표시줄만 흰색으로 남아 위쪽이 잘린 것처럼 보인다. -->
+  <meta name="theme-color" content="#f6f6f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#060b10" media="(prefers-color-scheme: dark)" />
+
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋</text></svg>" />
+
+  <!-- 한글 본문용 글꼴. 기본 글꼴(맑은 고딕)은 숫자와 한글의 굵기가 달라
+       세트 표처럼 숫자가 촘촘한 화면에서 줄이 고르지 않게 보인다.
+       내려받지 못해도 style.css의 대체 글꼴 목록이 그대로 이어받는다. -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -13,6 +28,10 @@
        각 화면 안쪽 요소는 id를 쓰지 않고 data-el로 찾는다. 모듈이 늘어도 이름이 겹치지 않는다. -->
 
   <div class="glow" id="glow" aria-hidden="true"></div>
+
+  <!-- 키보드로만 쓰는 사람이 탭 다섯 개를 매번 지나지 않고 본문으로 건너뛴다.
+       화면 위쪽 바깥에 숨어 있다가 Tab을 처음 눌렀을 때만 내려온다(style.css의 .skip-link). -->
+  <a class="skip-link" href="#app">본문으로 건너뛰기</a>
 
   <header class="app-header" id="appHeader" hidden>
     <div class="wrap header-inner">

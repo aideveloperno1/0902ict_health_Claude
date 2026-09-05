@@ -1,5 +1,11 @@
 const app = require('./app');
-const { connectDb, disconnectDb, explainConnectionFailure, uri } = require('./db');
+const {
+  connectDb,
+  disconnectDb,
+  explainConnectionFailure,
+  explainIndexFailures,
+  uri,
+} = require('./db');
 const { warnWeakJwtSecret } = require('./jwtSecret');
 
 const PORT = process.env.PORT || 3000;
@@ -67,6 +73,12 @@ const ready = (async () => {
     console.error(explainConnectionFailure(error));
     process.exit(1);
   }
+
+  // 연결에 성공해도 인덱스는 따로 실패할 수 있다. 위의 약한 비밀 키 경고와 같은 자리다.
+  // 서버를 멈추지는 않는다 — 인덱스가 없어도 앱은 돌아가고, 고치려면 서버를 켠 채로
+  // DB를 들여다봐야 하기 때문이다. 대신 무엇이 빠졌는지 분명히 알린다.
+  const indexWarning = await explainIndexFailures();
+  if (indexWarning) console.warn(indexWarning);
 
   const server = app.listen(PORT, () => {
     /**

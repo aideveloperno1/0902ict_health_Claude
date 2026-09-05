@@ -1,3 +1,8 @@
 node_modules/
 .env
 .vercel/
+
+# Plan documents
+PLAN.md
+PLAN_Antigravity.md
+PLAN_Claude.md

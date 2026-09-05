@@ -50,9 +50,20 @@ export function clearError(element) {
   showError(element, '');
 }
 
+/**
+ * 같은 자리에 "불러오는 중…"과 실패 메시지를 번갈아 띄운다.
+ *
+ * 기다리는 중일 때만 data-loading을 붙여, style.css가 그때만 회전 표시를 그린다.
+ * 글자만 있으면 화면이 멈춘 것인지 기다리는 중인지 구분되지 않는다.
+ * 판정 기준을 "…로 끝나는가"로 둔 이유: 부르는 쪽(screen.js·dashboard.js)이
+ * 이미 기다림을 뜻하는 말끝으로 …을 쓰고 있어, 호출부를 고치지 않아도 된다.
+ */
 export function showStatus(element, message) {
   element.textContent = message;
   element.hidden = !message;
+
+  if (typeof message === 'string' && message.endsWith('…')) element.dataset.loading = '';
+  else delete element.dataset.loading;
 }
 
 let toastTimer;

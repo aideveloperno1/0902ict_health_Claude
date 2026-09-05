@@ -113,7 +113,77 @@ function explainConnectionFailure(error) {
   ].join('\n');
 }
 
+/**
+ * 스키마에 적어 둔 인덱스가 실제로 만들어졌는지 확인한다.
+ *
+ * 왜 필요한가
+ *   mongoose는 모델을 처음 쓸 때 스키마의 인덱스를 배경에서 만든다. 이때 이미
+ *   규칙을 어기는 문서가 들어 있으면(예: 같은 사람 같은 날짜의 신체 지표가 두 건)
+ *   unique 인덱스 생성이 실패하는데, 그 실패는 아무 데도 나타나지 않는다.
+ *   서버는 "MongoDB 연결됨"만 찍고 평소처럼 뜬다.
+ *
+ *   그러면 BodyMetric의 "하루 1건"처럼 DB가 보장하기로 한 규칙이 조용히 사라진다.
+ *   코드의 upsert만 남아서, 같은 순간에 들어온 두 요청이 둘 다 통과할 수 있다.
+ *   갓 설치한 환경에서는 생기지 않고, 예전 데이터가 남아 있거나 덤프를 복원했을 때
+ *   걸린다. 즉 "내 컴퓨터에서는 되는데" 가 가장 잘 나오는 종류의 문제다.
+ *
+ * 왜 'index' 이벤트가 아니라 Model.init() 인가
+ *   Model.on('index', ...) 로도 실패를 받을 수 있지만, 리스너를 붙이기 전에 이벤트가
+ *   지나가 버리면 아무것도 못 듣는다. init()이 돌려주는 약속은 몇 번을 불러도 같은
+ *   것이라, 이미 끝난 뒤에 불러도 결과를 그대로 준다. 순서에 기대지 않아도 된다.
+ *
+ * @returns {Promise<string|null>} 문제가 있으면 안내 문구, 없으면 null
+ */
+async function explainIndexFailures() {
+  const names = mongoose.modelNames();
+
+  const results = await Promise.allSettled(
+    names.map(async (name) => {
+      try {
+        await mongoose.model(name).init();
+      } catch (error) {
+        // 어느 모델이 실패했는지 함께 남긴다. 메시지만으로는 알 수 없다.
+        throw new Error(`${name}  —  ${error.message}`);
+      }
+    })
+  );
+
+  const failed = results
+    .filter((r) => r.status === 'rejected')
+    .map((r) => `  · ${r.reason.message}`);
+
+  if (failed.length === 0) return null;
+
+  return [
+    '',
+    '인덱스를 만들지 못했습니다. 규칙 하나가 DB에서 빠진 채로 서버가 돕니다.',
+    '',
+    ...failed,
+    '',
+    '가장 흔한 원인은 이미 저장된 데이터가 그 규칙을 어기고 있는 경우입니다.',
+    '예를 들어 신체 지표는 "하루 1건"이라, userId와 date가 모두 같은 문서가',
+    '둘 이상이면 unique 인덱스를 만들 수 없습니다.',
+    '',
+    '중복을 찾는 방법 (mongosh):',
+    '  db.bodymetrics.aggregate([',
+    '    { $group: { _id: { u: "$userId", d: "$date" }, n: { $sum: 1 }, ids: { $push: "$_id" } } },',
+    '    { $match: { n: { $gt: 1 } } }',
+    '  ])',
+    '',
+    '남길 것 하나만 두고 나머지를 지운 뒤 서버를 다시 켜면 인덱스가 만들어집니다.',
+    '그때까지도 화면은 정상으로 보이지만, 같은 순간에 들어온 두 요청은 통과할 수 있습니다.',
+    '',
+  ].join('\n');
+}
+
 // 모듈당 한 번만 실행된다. connectDb() 안에서 부르면 재연결마다 중복 등록된다.
 watchConnection();
 
-module.exports = { connectDb, disconnectDb, explainConnectionFailure, uri, DEFAULT_URI };
+module.exports = {
+  connectDb,
+  disconnectDb,
+  explainConnectionFailure,
+  explainIndexFailures,
+  uri,
+  DEFAULT_URI,
+};
