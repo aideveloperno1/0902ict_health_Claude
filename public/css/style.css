@@ -11,79 +11,80 @@
      사용자가 "밝게"를 골랐는데 운영체제가 어두운 설정이면, 이 감싸기가 없을 때
      운영체제 쪽이 나중에 나와서 이겨 버린다. 사용자가 직접 고른 쪽이 항상 이겨야 한다.
 
-   색 계열을 청록(teal)으로 잡은 이유
-     기록을 오래 들여다보는 화면이다. 채도 높은 보라·파랑은 숫자 옆에서 눈에 먼저 들어와
-     정작 봐야 할 값(볼륨·칼로리)을 가린다. 청록은 강조로 쓰기에 충분히 또렷하면서
-     검정 글자와 같은 줄에 있어도 서로 밀어내지 않는다.
+   색 계열을 남색·파랑으로 잡은 이유
+     기록을 오래 들여다보는 화면이다. 채도가 높은 색은 숫자 옆에서 눈에 먼저 들어와
+     정작 봐야 할 값(볼륨·칼로리)을 가린다. 남색(#123a8c)→파랑(#1d5fd6)은
+     강조로 쓰기에 충분히 진하면서 검정 글자와 같은 줄에 있어도 서로 밀어내지 않는다.
+     회색 계열에도 파랑을 아주 조금 섞어(#5b6478 등) 강조색과 같은 계열로 묶는다.
 
    ★ 밝은 화면과 어두운 화면에서 강조색의 밝기를 다르게 쓴다
-     밝은 청록(#32e6e2)은 흰 바탕에서 명암비가 1.6:1밖에 안 나와 글자로 쓸 수 없다.
-     그래서 밝은 화면에서는 어두운 청록(#02807d, 흰 글자 기준 4.9:1)을 쓰고,
-     어두운 화면에서만 밝은 청록을 쓴다. 한 색을 양쪽에 돌려쓰면 반드시 한쪽이 안 읽힌다.
+     같은 파랑을 양쪽에 돌려쓰면 한쪽이 반드시 안 읽힌다. 밝은 화면에서는 진한
+     파랑(#1d5fd6, 흰 글자 기준 5.7:1)을, 어두운 화면에서는 바탕에서 뜨면서도
+     흰 글자를 받칠 수 있는 값(#2f6fe0, 흰 글자 4.7:1 · 바탕 대비 4.0:1)을 쓴다.
+     흔히 쓰는 #3b82f6은 어두운 바탕에서는 예쁘지만 흰 글자와 3.7:1이라 버튼에 못 쓴다.
 
-   중간 색(--surface-2 등)은 회색 계열 9단계에서 골랐다. 단계마다 밝기 차가 고르게
-   벌어져 있어, 면을 여러 겹 쌓아도 경계가 뭉개지지 않는다.
+   ★ 글자색은 카드(#ffffff) 위와 바탕(#eef1f7) 위 양쪽에서 4.5:1을 넘도록 골랐다
+     설명글(.status 등)은 카드 밖 바탕에도 놓인다. 카드 기준으로만 맞추면
+     그 글자들이 기준 미달이 된다.
    ========================================================================= */
 :root {
   /* 바탕과 면 */
-  --bg: #f6f6f7;
+  --bg: #eef1f7;
   --surface: #ffffff;
-  --surface-2: #f6f6f7;   /* 카드 안쪽에 한 겹 더 들어가는 면 (운동 카드 등) */
-  --surface-3: #e9ebed;   /* 표 머리글처럼 더 진하게 깔리는 면 */
+  --surface-2: #f4f8ff;   /* 카드 안쪽에 한 겹 더 들어가는 면 (운동 카드 등) */
+  --surface-3: #ecf3fd;   /* 표 머리글처럼 더 진하게 깔리는 면 */
   --input-bg: #ffffff;
 
-  --border: #e9ebed;
-  --border-strong: #d1d5da;   /* 입력창처럼 경계가 분명해야 하는 곳 */
+  /* 테두리는 바탕(#eef1f7)보다 진해야 카드 경계가 보인다.
+     바탕보다 옅은 값을 쓰면 흰 카드 안쪽에서만 보이고 바깥쪽 경계가 사라진다. */
+  --border: #d3dcec;
+  --border-strong: #c3cee4;   /* 입력창처럼 경계가 분명해야 하는 곳 */
 
   /* 글자. 세 단계로 나눈다. 본문 / 설명 / 아주 옅은 보조
-     세 값 모두 흰 카드 위에서 4.5:1(WCAG AA, 작은 글자 기준)을 넘도록 골랐다.
-     회색 계열의 중간값(#778089)은 4.01:1이라 아슬하게 못 미친다. 화면에서 보면
-     "읽히긴 하는데 눈이 조금 힘든" 정도인데, 설명글은 대개 작고 얇아서
-     그 차이가 그대로 읽는 부담이 된다. 그래서 한 단계씩 더 진한 값을 쓴다.
-       #545a61 = 6.97:1   #6b747d = 4.75:1 */
-  --text: #181a1c;
-  --text-muted: #545a61;
-  --text-dim: #6b747d;
+     세 값 모두 카드와 바탕 양쪽에서 4.5:1을 넘는다 (위 설명 참고). */
+  --text: #111827;
+  --text-muted: #5b6478;
+  --text-dim: #616a7d;
 
-  /* 강조 — 밝은 화면에서는 어두운 청록을 쓴다(위 설명 참고) */
-  --accent: #02807d;
-  --accent-deep: #016968;
-  --accent-bright: #05bdba;   /* 그라데이션·막대처럼 글자가 얹히지 않는 곳 */
-  --accent-hover: #016968;
-  --accent-text: #02807d;
-  --accent-soft: #defffe;
-  --accent-tint: #f2fffe;     /* hover 배경처럼 아주 옅게 깔 때 */
+  /* 강조 */
+  --accent: #1d5fd6;
+  --accent-deep: #123a8c;
+  --accent-bright: #38bdf8;   /* 그라데이션처럼 글자가 얹히지 않는 곳 */
+  --accent-hover: #1a54be;
+  --accent-text: #123a8c;
+  --accent-soft: #e8f1ff;
+  --accent-tint: #f0f7ff;     /* hover 배경처럼 아주 옅게 깔 때 */
   --on-accent: #ffffff;
-  --focus-ring: rgba(2, 128, 125, 0.22);
+  --focus-ring: rgba(29, 95, 214, 0.2);
 
   /* 위험 */
-  --danger: #c8102e;
-  --danger-hover: #a10d25;
-  --danger-text: #a10d25;
-  --danger-soft: #fdedf0;
-  --danger-border: #f5ccd4;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-text: #b91c1c;
+  --danger-soft: #fdecec;
+  --danger-border: #f3d2d2;
 
   /* 좋음(성공·완료) */
-  --ok: #016968;
-  --ok-soft: #defffe;
+  --ok: #15803d;
+  --ok-soft: #eaf6ee;
 
-  /* 탄단지 막대. 탄수화물은 강조색을 그대로 쓰므로 따로 두지 않는다.
-     셋이 한 막대에 붙어 있으므로 색상환에서 충분히 벌어진 값으로 고른다. */
-  --protein: #4f7ec7;
+  /* 탄단지 막대. 탄수화물은 강조색(파랑)을 그대로 쓰므로 따로 두지 않는다.
+     나머지 둘은 파랑에서 충분히 떨어진 초록·주황으로 잡는다. */
+  --protein: #15803d;
   --fat: #d97706;
 
   /* 그림자 — 세 단계.
      1은 카드가 바탕에서 살짝 떠 보이게 하는 정도,
      2는 마우스를 올렸을 때, 3은 화면 위에 뜨는 것(토스트·확인 바)에 쓴다. */
-  --shadow-1: 0 1px 2px rgba(24, 26, 28, 0.05);
-  --shadow-2: 0 14px 28px -18px rgba(24, 26, 28, 0.4);
-  --shadow-3: 0 20px 50px -24px rgba(24, 26, 28, 0.45), 0 1px 2px rgba(24, 26, 28, 0.07);
-  --shadow-accent: 0 10px 22px -12px rgba(2, 128, 125, 0.55);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-2: 0 14px 28px -18px rgba(18, 58, 140, 0.45);
+  --shadow-3: 0 20px 50px -24px rgba(18, 58, 140, 0.5), 0 1px 2px rgba(16, 24, 40, 0.07);
+  --shadow-accent: 0 10px 22px -12px rgba(18, 58, 140, 0.55);
 
   --header-bg: rgba(255, 255, 255, 0.86);
   --bar-bg: rgba(255, 255, 255, 0.92);   /* 아래에 붙는 저장 바 */
-  --glow-1: rgba(5, 189, 186, 0.18);
-  --glow-2: rgba(50, 230, 226, 0.12);
+  --glow-1: rgba(29, 95, 214, 0.16);
+  --glow-2: rgba(56, 189, 248, 0.14);
 
   --r-card: 18px;
   --r-input: 11px;
@@ -101,53 +102,52 @@
 /* 운영체제가 어두운 설정일 때. 단, 사용자가 "밝게"를 직접 고르지 않은 경우만. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #060b10;
-    --surface: #12181f;
-    --surface-2: #1e242c;
-    --surface-3: #272f38;
-    --input-bg: #1e242c;
+    --bg: #0a1020;
+    --surface: #121a2e;
+    --surface-2: #18223a;
+    --surface-3: #1b2742;
+    --input-bg: #18223a;
 
-    --border: #272f38;
-    --border-strong: #3b434c;
+    --border: #23304d;
+    --border-strong: #2f3f63;
 
-    --text: #e6ecf2;
-    --text-muted: #abb5bf;
-    --text-dim: #7e8792;
+    --text: #f2f5fb;
+    --text-muted: #9aa6c0;
+    --text-dim: #828da8;
 
-    /* 어두운 바탕에서는 밝은 청록을 쓴다. 대신 그 위에 얹는 글자는
-       흰색이 아니라 바탕과 같은 어두운 색이어야 읽힌다(--on-accent). */
-    --accent: #32e6e2;
-    --accent-deep: #14d8d4;
-    --accent-bright: #8efbf7;
-    --accent-hover: #8efbf7;
-    --accent-text: #32e6e2;
-    --accent-soft: rgba(50, 230, 226, 0.16);
-    --accent-tint: rgba(50, 230, 226, 0.09);
-    --on-accent: #060b10;
-    --focus-ring: rgba(50, 230, 226, 0.3);
+    /* 버튼 배경으로도 쓰이므로 흰 글자와 4.5:1을 넘겨야 한다.
+       #3b82f6은 어두운 바탕에서 보기 좋지만 흰 글자와 3.7:1이라 못 쓴다. */
+    --accent: #2f6fe0;
+    --accent-deep: #1d4ed8;
+    --accent-bright: #38bdf8;
+    --accent-hover: #3b82f6;
+    --accent-text: #93c5fd;
+    --accent-soft: rgba(59, 130, 246, 0.16);
+    --accent-tint: rgba(59, 130, 246, 0.1);
+    --on-accent: #ffffff;
+    --focus-ring: rgba(59, 130, 246, 0.32);
 
-    --danger: #ff5a6e;
-    --danger-hover: #ff8090;
-    --danger-text: #ff97a4;
-    --danger-soft: rgba(255, 90, 110, 0.13);
-    --danger-border: rgba(255, 90, 110, 0.38);
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --danger-text: #fca5a5;
+    --danger-soft: rgba(239, 68, 68, 0.12);
+    --danger-border: rgba(239, 68, 68, 0.38);
 
-    --ok: #32e6e2;
-    --ok-soft: rgba(50, 230, 226, 0.14);
+    --ok: #34d399;
+    --ok-soft: rgba(52, 211, 153, 0.14);
 
-    --protein: #7aa5e8;
+    --protein: #34d399;
     --fat: #fbbf24;
 
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-2: 0 14px 28px -18px rgba(0, 0, 0, 0.85);
-    --shadow-3: 0 20px 50px -24px rgba(0, 0, 0, 0.95), 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-accent: 0 10px 22px -12px rgba(50, 230, 226, 0.45);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 14px 28px -18px rgba(0, 0, 0, 0.8);
+    --shadow-3: 0 20px 50px -24px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-accent: 0 10px 22px -12px rgba(29, 78, 216, 0.7);
 
-    --header-bg: rgba(6, 11, 16, 0.86);
-    --bar-bg: rgba(18, 24, 31, 0.93);
-    --glow-1: rgba(50, 230, 226, 0.2);
-    --glow-2: rgba(5, 189, 186, 0.16);
-
+    --header-bg: rgba(10, 16, 32, 0.86);
+    --bar-bg: rgba(18, 26, 46, 0.93);
+    --glow-1: rgba(59, 130, 246, 0.2);
+    --glow-2: rgba(56, 189, 248, 0.16);
     color-scheme: dark;
   }
 }
@@ -156,51 +156,52 @@
    위 블록과 내용이 같다. 하나로 합치려면 선택자를 쉼표로 잇게 되는데,
    그러면 미디어 쿼리 안에 들어가서 "OS가 밝을 때 직접 고른 어둡게"가 적용되지 않는다. */
 :root[data-theme="dark"] {
-  --bg: #060b10;
-  --surface: #12181f;
-  --surface-2: #1e242c;
-  --surface-3: #272f38;
-  --input-bg: #1e242c;
+  --bg: #0a1020;
+  --surface: #121a2e;
+  --surface-2: #18223a;
+  --surface-3: #1b2742;
+  --input-bg: #18223a;
 
-  --border: #272f38;
-  --border-strong: #3b434c;
+  --border: #23304d;
+  --border-strong: #2f3f63;
 
-  --text: #e6ecf2;
-  --text-muted: #abb5bf;
-  --text-dim: #7e8792;
+  --text: #f2f5fb;
+  --text-muted: #9aa6c0;
+  --text-dim: #828da8;
 
-  --accent: #32e6e2;
-  --accent-deep: #14d8d4;
-  --accent-bright: #8efbf7;
-  --accent-hover: #8efbf7;
-  --accent-text: #32e6e2;
-  --accent-soft: rgba(50, 230, 226, 0.16);
-  --accent-tint: rgba(50, 230, 226, 0.09);
-  --on-accent: #060b10;
-  --focus-ring: rgba(50, 230, 226, 0.3);
+  /* 버튼 배경으로도 쓰이므로 흰 글자와 4.5:1을 넘겨야 한다.
+     #3b82f6은 어두운 바탕에서 보기 좋지만 흰 글자와 3.7:1이라 못 쓴다. */
+  --accent: #2f6fe0;
+  --accent-deep: #1d4ed8;
+  --accent-bright: #38bdf8;
+  --accent-hover: #3b82f6;
+  --accent-text: #93c5fd;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-tint: rgba(59, 130, 246, 0.1);
+  --on-accent: #ffffff;
+  --focus-ring: rgba(59, 130, 246, 0.32);
 
-  --danger: #ff5a6e;
-  --danger-hover: #ff8090;
-  --danger-text: #ff97a4;
-  --danger-soft: rgba(255, 90, 110, 0.13);
-  --danger-border: rgba(255, 90, 110, 0.38);
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-text: #fca5a5;
+  --danger-soft: rgba(239, 68, 68, 0.12);
+  --danger-border: rgba(239, 68, 68, 0.38);
 
-  --ok: #32e6e2;
-  --ok-soft: rgba(50, 230, 226, 0.14);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.14);
 
-  --protein: #7aa5e8;
+  --protein: #34d399;
   --fat: #fbbf24;
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 14px 28px -18px rgba(0, 0, 0, 0.85);
-  --shadow-3: 0 20px 50px -24px rgba(0, 0, 0, 0.95), 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-accent: 0 10px 22px -12px rgba(50, 230, 226, 0.45);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 14px 28px -18px rgba(0, 0, 0, 0.8);
+  --shadow-3: 0 20px 50px -24px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-accent: 0 10px 22px -12px rgba(29, 78, 216, 0.7);
 
-  --header-bg: rgba(6, 11, 16, 0.86);
-  --bar-bg: rgba(18, 24, 31, 0.93);
-  --glow-1: rgba(50, 230, 226, 0.2);
-  --glow-2: rgba(5, 189, 186, 0.16);
-
+  --header-bg: rgba(10, 16, 32, 0.86);
+  --bar-bg: rgba(18, 26, 46, 0.93);
+  --glow-1: rgba(59, 130, 246, 0.2);
+  --glow-2: rgba(56, 189, 248, 0.16);
   color-scheme: dark;
 }
 
