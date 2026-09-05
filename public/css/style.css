@@ -1179,6 +1179,14 @@ body:has(#leaveBar:not([hidden])) .form-actions {
   font-weight: 700;
 }
 
+/* 계산이 안 될 때 안내문 아래 붙는 "입력하러 가기" 버튼.
+   안내문과 붙어 있으면 문장의 일부처럼 보이므로 한 줄 띄운다. */
+.balance-fix {
+  display: inline-flex;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
 .balance-formula { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
 
 /* 하루 요약에서 결론에 해당하는 숫자다. 화면에서 가장 크게 둔다. */

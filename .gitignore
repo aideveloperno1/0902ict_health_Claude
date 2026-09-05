@@ -1,11 +1,11 @@
 node_modules/
 .env
 .vercel/
+.vercel
+.env*
 
 # Plan documents
 PLAN.md
 PLAN_Antigravity.md
 PLAN_Claude.md
-
-.vercel
-.env*
+배포문제.md

@@ -533,7 +533,12 @@
           <p class="gauge-scale" aria-hidden="true"><span>-1,000</span><span>0</span><span>+1,000</span></p>
         </div>
 
+        <!-- 계산이 안 될 때만 보인다. 안내 문구만 두면 "어디서 입력하나" 를 스스로
+             찾아야 하므로, 갈 곳을 버튼으로 함께 준다. -->
         <p class="dash-empty" data-el="balanceMissing" hidden></p>
+        <a class="btn btn-secondary btn-sm balance-fix" data-el="balanceFix" href="#/body" hidden>
+          내 몸에서 입력하기
+        </a>
       </article>
 
       <article class="card">
@@ -667,6 +672,49 @@
         <h1 class="view-title">내 몸</h1>
       </div>
 
+      <!-- 거의 바뀌지 않는 값. 한 번 넣어 두면 계속 쓰인다.
+           날짜별 체중과 같은 화면에 두는 이유: 둘 다 "내 몸에 관한 것"이라
+           사용자가 여기서 찾는다. 저장 위치는 서로 다르지만(계정 / 날짜별 기록)
+           그건 서버 사정이지 화면을 나눌 이유가 아니다. -->
+      <h2 class="section-title">내 신체 정보</h2>
+
+      <p class="status" data-el="profileStatus" hidden></p>
+
+      <form class="card form-card" data-el="profileForm" novalidate hidden>
+        <div class="grid-3">
+          <div class="field">
+            <label for="bSex">성별</label>
+            <select id="bSex" data-el="sex">
+              <option value="">선택 안 함</option>
+              <option value="male">남성</option>
+              <option value="female">여성</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bBirth">출생연도</label>
+            <input type="number" id="bBirth" data-el="birthYear" min="1900" step="1" placeholder="1996" />
+          </div>
+          <div class="field">
+            <label for="bHeight">키(cm)</label>
+            <input type="number" id="bHeight" data-el="heightCm" min="0" step="0.1" placeholder="178" />
+          </div>
+        </div>
+
+        <p class="hint">
+          아래 체중과 함께 <strong>기초대사량</strong>을 계산하는 데 쓰입니다.
+          비워두면 대시보드에서 <strong>계산하지 않습니다.</strong>
+          임의의 기본값으로 대신 계산하면 틀린 숫자를 보여주게 되기 때문입니다.
+        </p>
+
+        <p class="form-error" data-el="profileError" hidden></p>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" data-el="profileSubmit">저장</button>
+        </div>
+      </form>
+
+      <h2 class="section-title">체중 기록</h2>
+
       <form class="card form-card" data-el="form" novalidate>
         <div class="grid-2">
           <div class="field">
@@ -745,31 +793,9 @@
           <p class="hint">이메일은 변경할 수 없습니다.</p>
         </div>
 
-        <h2 class="section-title">기초대사량 계산에 쓰이는 값</h2>
-
-        <div class="grid-3">
-          <div class="field">
-            <label for="pSex">성별</label>
-            <select id="pSex" data-el="sex">
-              <option value="">선택 안 함</option>
-              <option value="male">남성</option>
-              <option value="female">여성</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="pBirth">출생연도</label>
-            <input type="number" id="pBirth" data-el="birthYear" min="1900" step="1" placeholder="1996" />
-          </div>
-          <div class="field">
-            <label for="pHeight">키(cm)</label>
-            <input type="number" id="pHeight" data-el="heightCm" min="0" step="0.1" placeholder="178" />
-          </div>
-        </div>
-
         <p class="hint">
-          비워두면 대시보드에서 기초대사량을 <strong>계산하지 않습니다.</strong>
-          임의의 기본값으로 대신 계산하면 틀린 숫자를 보여주게 되기 때문입니다.
-          체중은 <a class="link-inline" href="#/body">내 몸</a>에서 기록한 값을 씁니다.
+          기초대사량 계산에 쓰이는 <strong>성별 · 출생연도 · 키 · 체중</strong>은
+          <a class="link-inline" href="#/body">내 몸</a>에서 입력합니다.
         </p>
 
         <p class="form-error" data-el="error" hidden></p>

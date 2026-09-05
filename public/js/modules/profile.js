@@ -1,20 +1,19 @@
-// 프로필 화면. 기초대사량 계산에 필요한 성별·출생연도·키를 받는다.
+// 프로필 화면. 계정에 관한 것만 다룬다 — 이름 · 이메일 · 비밀번호.
+//
+// 성별·출생연도·키는 여기 있었지만 '내 몸' 화면으로 옮겼다.
+// 사용자는 그 값들을 몸에 관한 정보로 여겨 '내 몸'에서 찾는데, 프로필에 있으면
+// 대시보드가 "계산할 수 없습니다"라고만 하고 갈 곳을 알려주지 못했다.
+// 저장되는 곳(계정)은 그대로다. 어느 화면에서 입력받느냐만 바뀌었다.
 
 import { api, session } from '../api.js';
 import {
   mountView, el, clearError, showError, renderHeader, toast, withBusy, navSnapshot,
 } from '../ui.js';
 import { loadScreen } from '../screen.js';
-import { numValue } from '../rows.js';
 
 function fill(root, user) {
   el(root, 'name').value = user.name || '';
   el(root, 'email').value = user.email || '';
-
-  const profile = user.profile || {};
-  el(root, 'sex').value = profile.sex || '';
-  el(root, 'birthYear').value = profile.birthYear ?? '';
-  el(root, 'heightCm').value = profile.heightCm ?? '';
 
   el(root, 'form').hidden = false;
   el(root, 'pwForm').hidden = false;
@@ -82,15 +81,9 @@ async function handleSubmit(root, event) {
   const name = el(root, 'name').value.trim();
   if (!name) return showError(errorEl, '이름은 비어 있을 수 없습니다.');
 
-  // 비운 칸은 null로 보낸다. 서버가 "값 없음"으로 저장하고, 대시보드는 계산을 건너뛴다.
-  const payload = {
-    name,
-    profile: {
-      sex: el(root, 'sex').value || null,
-      birthYear: numValue(el(root, 'birthYear')),
-      heightCm: numValue(el(root, 'heightCm')),
-    },
-  };
+  // profile은 보내지 않는다. 보내지 않은 항목을 서버가 지금 값 그대로 두기 때문에,
+  // '내 몸'에서 넣어 둔 성별·출생연도·키가 이름만 바꿔도 지워지지 않는다.
+  const payload = { name };
 
   try {
     const updated = await withBusy(el(root, 'submit'), '저장 중…', () => api.updateMe(payload));

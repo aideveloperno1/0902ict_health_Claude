@@ -143,6 +143,21 @@ function renderBody(root, records, date) {
 }
 
 /**
+ * 받침이 있으면 '이', 없으면 '가'.
+ *
+ * 전에는 '이(가)'를 그대로 붙여서 "키이(가) 없어..." 처럼 찍혔다.
+ * 빠진 항목이 무엇이냐에 따라 마지막 글자가 달라지므로 그때그때 고른다.
+ *   성별 → 성별이   출생연도 → 출생연도가   키 → 키가   체중 → 체중이
+ *
+ * 한글 음절은 0xAC00부터 28개 종성이 한 묶음이라, 28로 나눈 나머지가 0이면 받침이 없다.
+ */
+function subjectParticle(word) {
+  const code = word.charCodeAt(word.length - 1);
+  if (code < 0xac00 || code > 0xd7a3) return '이(가)';   // 한글이 아니면 판단하지 않는다
+  return (code - 0xac00) % 28 === 0 ? '가' : '이';
+}
+
+/**
  * 계산할 수 없을 때 부르는 함수.
  * 숨기기만 하면 앞서 본 날짜의 수식이 숨겨진 채 남는다. 날짜를 옮겨 다니는 화면이라
  * 잘못된 값이 되살아나지 않도록 반드시 비운다.
@@ -154,6 +169,9 @@ function clearBalance(root, message) {
   el(root, 'balance').hidden = true;
   el(root, 'balanceMissing').hidden = false;
   el(root, 'balanceMissing').textContent = message;
+
+  // 안내만 하고 갈 곳을 주지 않으면 사용자가 어디로 가야 할지 스스로 찾아야 한다.
+  el(root, 'balanceFix').hidden = false;
 }
 
 // date는 이 화면이 "불러오기 시작할 때" 고른 날짜다. 전역 selectedDate를 직접 읽지 않는다.
@@ -164,9 +182,12 @@ function renderBalance(root, { profile, weight, workouts, intake, date }) {
 
   const missing = missingBmrInputs(profile, weight.weightKg);
   if (missing.length > 0) {
+    // 넷 다 '내 몸' 화면에서 입력한다. 예전에는 프로필과 내 몸으로 나뉘어 있어
+    // 두 곳을 함께 안내해야 했고, 그래서 어디로 가야 할지 알기 어려웠다.
+    const last = missing[missing.length - 1];
     return clearBalance(
       root,
-      `${missing.join(' · ')}이(가) 없어 계산할 수 없습니다. 프로필과 내 몸에서 입력하면 표시됩니다.`
+      `${missing.join(' · ')}${subjectParticle(last)} 없어 계산할 수 없습니다. 내 몸에서 입력하면 표시됩니다.`
     );
   }
 
@@ -178,6 +199,7 @@ function renderBalance(root, { profile, weight, workouts, intake, date }) {
   balance.hidden = false;
   missingEl.hidden = true;
   missingEl.textContent = ''; // 앞 날짜의 안내 문구가 숨겨진 채 남지 않도록
+  el(root, 'balanceFix').hidden = true;
 
   const source = weight.fromDate === date ? '' : ` · 체중은 ${weight.fromDate} 기록 기준`;
 
@@ -253,7 +275,7 @@ async function load(root) {
   const profile = profileResult.status === 'fulfilled' ? profileResult.value.profile : null;
 
   if (!profile || bodyResult.status !== 'fulfilled') {
-    return clearBalance(root, '프로필이나 신체 기록을 불러오지 못해 계산할 수 없습니다.');
+    return clearBalance(root, '신체 정보나 체중 기록을 불러오지 못해 계산할 수 없습니다.');
   }
 
   renderBalance(root, {
