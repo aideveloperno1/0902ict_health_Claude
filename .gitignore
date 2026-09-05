@@ -6,3 +6,6 @@ node_modules/
 PLAN.md
 PLAN_Antigravity.md
 PLAN_Claude.md
+
+.vercel
+.env*

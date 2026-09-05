@@ -79,11 +79,11 @@ app.use(express.json());
 // 갱신 토큰이 httpOnly 쿠키로 오기 때문에 필요하다(refreshTokens.js 참고).
 app.use(cookieParser());
 
-// 화면(프론트엔드). Vercel에서는 정적 파일을 Vercel CDN이 서빙한다.
-// 서버리스 함수 안에서 중복 서빙할 필요가 없다. (Vercel은 자동으로 VERCEL=1 환경변수를 설정해 준다)
-if (!process.env.VERCEL) {
-  app.use(express.static(path.join(__dirname, 'public')));
-}
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
